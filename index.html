@@ -1,0 +1,964 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+  <title>Dispenser Control</title>
+</head>
+
+<style>
+  table {
+    font-family: arial, sans-serif;
+    border-collapse: collapse;
+    width: 100%;
+  }
+
+  td,
+  th {
+    border: 0px solid #dddddd;
+    text-align: left;
+    vertical-align: top;
+    padding: 8px;
+    font-size: 12px;
+  }
+
+  .hl {
+    display: block;
+    height: 1px;
+    border: 0;
+    border-top: 1px solid #ccc;
+    margin: 1em 0;
+    padding: 0;
+  }
+
+  h1 {
+    font-size: 18px;
+  }
+</style>
+
+<body>
+  <script src="wasm_exec.js"></script>
+
+  <script>
+    if (!WebAssembly.instantiateStreaming) {
+      // polyfill
+      WebAssembly.instantiateStreaming = async (resp, importObject) => {
+        const source = await (await resp).arrayBuffer();
+        return await WebAssembly.instantiate(source, importObject);
+      };
+    }
+
+    const go = new Go();
+
+    let mod, inst;
+
+    WebAssembly.instantiateStreaming(fetch("lib.wasm"), go.importObject).then(async result => {
+      mod = result.module;
+      inst = result.instance;
+      await go.run(inst);
+    });
+  </script>
+
+  <table style="width:100%">
+    <tr>
+      <th>
+        <h1>Web Socket</h1>
+        <table style="width:50%">
+          <tr>
+            <th>Broker IP:</th>
+            <th><input id="txtBrokerIp" value="skyrnet.local" type="text"></th>
+          </tr>
+          <tr>
+            <th>Kent server Port:</th>
+            <th><input id="txtBrokerPort" value="8081" type="text"></th>
+          </tr>
+          <tr>
+            <th>
+              <button id="btnConn" onclick="Connect()" value="" type="button">Connect</button>
+              <button id="btnDisconn" onclick="Disconnect()" value="" type="button">Disconnect</button>
+            </th>
+          </tr>
+        </table>
+      </th>
+
+      <th>
+        <h1>Device Configuration</h1>
+        <table style="width:50%">
+          <tr>
+            <th>Device ID:</th>
+            <th><select id="txtDispenserId">
+                <option value="00000000-0000-0000-0000-000000000001" selected="Default" type="text">Default</option>
+                <option value="ed668654-8994-47a3-9c55-7cb9509e4daf" type="text">Fryr_Sim</option>
+                <option value="78ef34b8-c492-4b4a-a7eb-f69947003b16" type="text">Fryr_301_A</option>
+                <option value="8e799864-19dc-468d-b2ac-c46f24b86f6d" type="text">Fryr_301_B</option>
+                <option value="930b49ba-7b5e-40e5-aced-f51b9bb93b02" type="text">Fryr_301_C</option>
+              </select></th>
+          </tr>
+          <tr>
+            <th>
+              <button id="btnDispenserReboot" onclick="DispenserReboot()" value="" type="button">Reboot</button>
+            </th>
+          </tr>
+        </table>
+      </th>
+
+      <th>
+        <h1>EEPROM</h1>
+        <table style="width:10%">
+          <tr>
+            <th>
+              <button id="btnEepromRead" onclick="EepromRead()" value="" type="button">Read</button>
+            </th>
+            <th>
+              <button id="btnEepromWrite" onclick="EepromWrite()" value="" type="button">Write</button>
+              <p>
+                <font color="red">WARNING: All fields in RED will be written into EEPROM.</font>
+              </p>
+            </th>
+          </tr>
+          <tr>
+            <th>
+              <button id="btnEepromExport" onclick="EepromExport()" value="" type="button">Export</button>
+            </th>
+            <th>
+              <input type="file" id="btnEepromImport" style="display: none" /><button
+                onclick="btnEepromImport.click()">Import</button>
+            </th>
+            <textarea id="eepromExportData" value="" type="text" hidden></textarea>
+          </tr>
+        </table>
+      </th>
+
+      <th>
+        <h1>Upgrade Firmware</h1>
+        <table style="width:10%">
+          <tr>
+            <th>Firmware URL:</th>
+            <th><input id="txtFirmwareUrl" value="skyrnet.local:8080/app1.bin" type="text"></th>
+            <th>
+              <select id="cmbFirmwareType" onchange="ChangeFirmwareUpgradePath(event)">
+                <option value="1">APP_1</option>
+                <option value="2">HMI</option>
+              </select>
+            </th>
+          </tr>
+
+          <tr>
+            <th>
+              <button id="btnUpgradeFirmware" onclick="UpgradeFirmware()" value="" type="button">Upgrade
+                Firmware</button>
+            </th>
+          </tr>
+        </table>
+      </th>
+
+    </tr>
+  </table>
+
+  <div class="hl"></div>
+
+  <table style="width:100%">
+    <tr>
+      <th>
+        <h1>Factory</h1>
+        <table style="width:50%">
+          <tr>
+            <th>
+              <font color="blue">Dispenser ID:</font>
+            </th>
+            <th><input id="txtFactoryDispenserId" value="00000000-0000-0000-0000-000000000001" type="text" size="35">
+            </th>
+          </tr>
+          <tr>
+            <th>
+              <font color="blue">MAC:</font>
+            </th>
+            <th><input id="txtFactoryMac" value="00:80:E1:00:00:01" type="text"></th>
+          </tr>
+          <tr>
+            <th>
+              <font color="blue">Type:</font>
+            </th>
+            <th>
+              <select id="cmbFactoryType">
+                <option value="0">Default</option>
+                <option value="1">Beta Vibrator</option>
+                <option value="2">Beta Peristaltic</option>
+                <option value="3">Beta Auger</option>
+                <option value="4">Piston</option>
+                <option value="5">Pass</option>
+                <option value="6">Frame</option>
+                <option value="7">Beta Condiment</option>
+                <option value="8">Fryer Portioning</option>
+                <option value="9">Fryer Preparing</option>
+              </select>
+            </th>
+          </tr>
+          <tr>
+            <th>
+              <font color="blue">HW Rev:</font>
+            </th>
+            <th><input id="txtFactoryHwRev" value="1" type="text"></th>
+          </tr>
+          <tr>
+            <th><button id="btnFactory" onclick="FactoryChange()" value="" type="button">Change</button></th>
+          </tr>
+        </table>
+
+        <br>
+
+        <h1>Scale</h1>
+        <table style="width:50%">
+          <tr>
+            <th>Idx:</th>
+            <th><input id="txtScaleIdx" value="0" type="text"></th>
+          </tr>
+          <tr>
+            <th>
+              <font color="red">Reading Sample:</font>
+            </th>
+            <th><input id="txtScaleReadingSamples" value="1" type="text"></th>
+            <th><button id="btnScaleRead" onclick="ScaleRead()" value="" type="button">Read</button></th>
+          </tr>
+          <tr>
+            <th>
+              <font color="red">Tare Sample:</font>
+            </th>
+            <th><input id="txtScaleTareSampl" value="1" type="text"></th>
+            <th><button id="btnScaleTare" onclick="ScaleTare()" value="" type="button">Tare</button></th>
+          </tr>
+          <tr>
+            <th>
+              <font color="red">Ref. Weight (g):</font>
+            </th>
+            <th><input id="txtScaleCalibrWeight" value="1000" type="text"></th>
+          </tr>
+          <tr>
+            <th>
+              <font color="red">Ref. Weight Sample:</font>
+            </th>
+            <th><input id="txtScaleCalibrWSampl" value="1" type="text"></th>
+            <th><button id="btnScaleCalibFull" onclick="ScaleCalibFull()" value="" type="button">Calibrate Full</button>
+            </th>
+          </tr>
+          <tr>
+            <th>
+              <font color="red">Zero Weight Sample:</font>
+            </th>
+            <th><input id="txtScaleCalibrZeroSampl" value="1" type="text"></th>
+            <th><button id="btnScaleCalibZero" onclick="ScaleCalibZero()" value="" type="button">Calibrate Zero</button>
+            </th>
+          </tr>
+          <tr>
+            <th>
+              <font color="red">Tray Detection Threshold (g):</font>
+            </th>
+            <th><input id="txtScaleTrayWeight" value="4" type="text"></th>
+          </tr>
+          <th>
+          <th>
+            <button id="btnScaleSetParam" onclick="ScaleSetParams()" value="" type="button">Update Parameters</button>
+          </th>
+      </th>
+  </table>
+
+  <br>
+
+  <h1>Hopper</h1>
+  <table style="width:50%">
+    <tr>
+      <th>Idx:</th>
+      <th><input id="txtHopperIdx" value="0" type="text"></th>
+      <th><button id="btnHopperRead" onclick="HopperRead()" value="" type="button">Read</button></th>
+      <th><button id="btnHopperOffset" onclick="HopperCalibrationOffset()" value="" type="button">Calibration
+          Offset</button></th>
+    </tr>
+  </table>
+
+  </th>
+
+  <th>
+
+    <h1>State</h1>
+    <table style="width:50%">
+      <tr>
+        <button id="btnGetState" onclick="GetState()" value="" type="button">Get State</button>
+      </tr>
+    </table>
+
+    <br>
+
+    <h1>Ingredient</h1>
+    <table style="width:80%">
+      <tr>
+        <th>
+          <font color="red">Name:</font>
+        </th>
+        <th><input id="txtIngredientName" value="Ingredient" type="text" maxlength="24"></th>
+      </tr>
+      <tr>
+        <th></th>
+        <th><button id="btnIngredientSetParam" onclick="IngredientSetParams()" value="" type="button">Update
+            Parameters</button>
+        </th>
+      </tr>
+    </table>
+
+    <br>
+
+    <h1>Stepper Motor</h1>
+    <table style="width:80%">
+      <tr>
+        <th>Idx:</th>
+        <th><input id="txtStepperIdx" value="0" type="text"></th>
+      </tr>
+      <tr>
+        <th>Current (0 - 31):</th>
+        <th><input id="txtStepperCurrent" value="15" type="text"></th>
+      </tr>
+      <tr>
+        <th>Angle:</th>
+        <th><input id="txtStepperAngle" value="90" type="text"></th>
+        <th><button id="btnStepperRotate" onclick="StepperRotate()" value="" type="button">Rotate</button></th>
+      </tr>
+      <tr>
+        <th>
+          <font color="red">Max Speed Rps:</font>
+        </th>
+        <th><input id="txtStepperSpeedRps" value="1.0" type="text"></th>
+      </tr>
+      <tr>
+        <th>
+          <font color="red">Accel Rpss:</font>
+        </th>
+        <th><input id="txtStepperAccelRps" value="0.01" type="text"></th>
+      </tr>
+      <tr>
+        <th>
+          <font color="red">Decel Rpss:</font>
+        </th>
+        <th><input id="txtStepperDecelRps" value="0.01" type="text"></th>
+      </tr>
+      <tr>
+        <th>
+          <font color="red">Homing Speed Rps:</font>
+        </th>
+        <th><input id="txtStepperHomeSpeedRps" value="1.0" type="text"></th>
+      </tr>
+      <tr>
+        <th>
+          <font color="red">Homing Accel Rpss:</font>
+        </th>
+        <th><input id="txtStepperHomeAccelRps" value="0.01" type="text"></th>
+      </tr>
+      <tr>
+        <th>
+          <font color="red">Direction (0: Forward, 1: Backward):</font>
+        </th>
+        <th><input id="txtStepperDir" value="0" type="text"></th>
+      </tr>
+      <tr>
+        <th>
+          <font color="red">Max Current (0 - 31):</font>
+        </th>
+        <th><input id="txtStepperMaxCurrent" value="31" type="text"></th>
+      </tr>
+      <tr>
+        <th>
+          <font color="red">Min Current (0 - 31):</font>
+        </th>
+        <th><input id="txtStepperMinCurrent" value="15" type="text"></th>
+      </tr>
+      <tr>
+        <th>
+          <font color="red">Hold Current (0 - 31):</font>
+        </th>
+        <th><input id="txtStepperHoldCurrent" value="0" type="text"></th>
+      </tr>
+      <tr>
+        <th>
+          <font color="red">Mass Retreat Speed (perc):</font>
+        </th>
+        <th><input id="txtStepperRetreatSpeed" value="0" type="text"></th>
+      </tr>
+      <tr>
+        <th>
+          <font color="red">Mass Retreat Angle (+ve: forward, -ve: backward):</font>
+        </th>
+        <th><input id="txtStepperRetreatAngle" value="0" type="text"></th>
+      </tr>
+      <tr>
+        <th>
+          <button id="btnStepperSpin" onclick="StepperSpin()" value="" type="button">Spin</button>
+          <button id="btnStepperStop" onclick="StepperStop()" value="" type="button">Stop</button>
+        </th>
+        <th><button id="btnStepperSetParam" onclick="StepperSetParams()" value="" type="button">Update
+            Parameters</button></th>
+      </tr>
+    </table>
+  </th>
+
+  <th>
+    <table style="width:80%">
+      <h1>Vibrator</h1>
+      <tr>
+        <th>Amplitube (perc):</th>
+        <th><input id="txtVibratorAmplitube" value="50" type="text"></th>
+      </tr>
+      <tr>
+        <th>
+          <button id="btnVibratorRun" onclick="VibratorRun()" value="" type="button">Run</button>
+        </th>
+        <th>
+          <button id="btnVibratorStop" onclick="VibratorStop()" value="" type="button">Stop</button>
+        </th>
+      </tr>
+    </table>
+
+    <br>
+
+    <table style="width:80%">
+      <h1>DC Motor</h1>
+      <tr>
+        <th>Idx:</th>
+        <th><input id="txtDcMotorIdx" value="0" type="text"></th>
+      </tr>
+      <tr>
+        <th>
+          <font color="red">Speed (perc):</font>
+        </th>
+        <th><input id="txtDcMotorSpeedPerc" value="50" type="text"></th>
+      </tr>
+      <tr>
+        <th>
+          <font color="red">Direction (0: Forward, 1: Backward):</font>
+        </th>
+        <th><input id="txtDcMotorDir" value="0" type="text"></th>
+      </tr>
+      <tr>
+        <th>
+          <font color="red">Mass Retreat Speed (perc):</font>
+        </th>
+        <th><input id="txtDcMotorRetreatSpeed" value="0" type="text"></th>
+      </tr>
+      <tr>
+        <th>
+          <font color="red">Mass Retreat Time (ms):</font>
+        </th>
+        <th><input id="txtDcMotorRetreatTime" value="0" type="text"></th>
+      </tr>
+      <tr>
+        <th>
+          <button id="btnDcMotorSpin" onclick="DcMotorSpin()" value="" type="button">Spin</button>
+          <button id="btnDcMotorStop" onclick="DcMotorStop()" value="" type="button">Stop</button>
+        </th>
+        <th><button id="btnDcMotorSetParam" onclick="DcMotorSetParams()" value="" type="button">Update
+            Parameters</button></th>
+      </tr>
+    </table>
+
+    <br>
+
+    <table>
+      <h1>Transport</h1>
+      <tr>
+        <th>Idx:</th>
+        <th><input id="txtTransportIdx" value="0" type="text"></th>
+      </tr>
+      <tr>
+        <th>To:</th>
+        <th>
+          <select id="txtTransportMoveToPos">
+            <option value="0">Current Position</option>
+            <option value="1">Position 0</option>
+            <option value="2">Position 1</option>
+            <option value="3">Position 2</option>
+            <option value="4">Position 3</option>
+            <option value="5">Position 4</option>
+            <option value="6">Position 5</option>
+            <option value="7">Position 6</option>
+            <option value="8">Position 7</option>
+            <option value="9">Position 8</option>
+            <option value="10">Position 9</option>
+          </select>
+        </th>
+      </tr>
+      <tr>
+        <th>From:</th>
+        <th>
+          <select id="txtTransportMoveFromPos">
+            <option value="0">Current Position</option>
+            <option value="1">Position 0</option>
+            <option value="2">Position 1</option>
+            <option value="3">Position 2</option>
+            <option value="4">Position 3</option>
+            <option value="5">Position 4</option>
+            <option value="6">Position 5</option>
+            <option value="7">Position 6</option>
+            <option value="8">Position 7</option>
+            <option value="9">Position 8</option>
+            <option value="10">Position 9</option>
+          </select>
+        </th>
+      </tr>
+      <tr>
+        <th>
+        <th>
+          <button id="btnTransportMove" onclick="TransportMove()" value="" type="button">Move</button>
+          <button id="btnStopAllSteppers" onclick="StopAllSteppers()" value="" type="button">Stop All</button>
+        </th>
+  </th>
+  </tr>
+  <tr>
+    <th>
+      <font color="red">Position 0 (microsteps):</font>
+    </th>
+    <th><input id="txtPosition0Micro" value="0" type="text"></th>
+  </tr>
+  <tr>
+    <th>
+      <font color="red">Position 1 (microsteps):</font>
+    </th>
+    <th><input id="txtPosition1Micro" value="0" type="text"></th>
+  </tr>
+  <tr>
+    <th>
+      <font color="red">Position 2 (microsteps):</font>
+    </th>
+    <th><input id="txtPosition2Micro" value="0" type="text"></th>
+  </tr>
+  <tr>
+    <th>
+      <font color="red">Position 3 (microsteps):</font>
+    </th>
+    <th><input id="txtPosition3Micro" value="0" type="text"></th>
+  </tr>
+  <tr>
+    <th>
+      <font color="red">Position 4 (microsteps):</font>
+    </th>
+    <th><input id="txtPosition4Micro" value="0" type="text"></th>
+  </tr>
+  <tr>
+    <th>
+      <font color="red">Position 5 (microsteps):</font>
+    </th>
+    <th><input id="txtPosition5Micro" value="0" type="text"></th>
+  </tr>
+  <tr>
+    <th>
+      <font color="red">Position 6 (microsteps):</font>
+    </th>
+    <th><input id="txtPosition6Micro" value="0" type="text"></th>
+  </tr>
+  <tr>
+    <th>
+      <font color="red">Position 7 (microsteps):</font>
+    </th>
+    <th><input id="txtPosition7Micro" value="0" type="text"></th>
+  </tr>
+  <tr>
+    <th>
+      <font color="red">Position 8 (microsteps):</font>
+    </th>
+    <th><input id="txtPosition8Micro" value="0" type="text"></th>
+  </tr>
+  <tr>
+    <th>
+      <font color="red">Position 9 (microsteps):</font>
+    </th>
+    <th><input id="txtPosition9Micro" value="0" type="text"></th>
+  </tr>
+  <tr>
+    <th>
+      <font color="red">Tolerance (microsteps):</font>
+    </th>
+    <th><input id="txtToleranceMicro" value="0" type="text"></th>
+  </tr>
+  <tr>
+    <th></th>
+    <th><button id="btnTransportPosSetParam" onclick="TransportPosSetParams()" value="" type="button">Update
+        Parameters</button></th>
+  </tr>
+
+  </table>
+
+  </th>
+
+  <th>
+    <table style="width:80%">
+      <h1>Process</h1>
+      <tr>
+        <th>Fry Position Idx:</th>
+        <th><input id="txtDispenseMassIdx" value="0" type="text"></th>
+      </tr>
+      <tr>
+        <th>Mass (g):</th>
+        <th><input id="txtDispenseMass" value="100" type="text"></th>
+      </tr>
+      <tr>
+        <th>Simulation time (ms):</th>
+        <th><input id="txtDispenseMassSimT" value="0" type="text"></th>
+      </tr>
+      <tr>
+        <th>Mass Correction (g):</th>
+        <th><input id="txtDispenseMassCorrection" value="0" type="text"></th>
+      </tr>
+      <tr>
+        <th>Pid dbg res:</th>
+        <th><input id="txtDispensePidDbg" value="1" type="text"></th>
+      </tr>
+      <tr>
+        <th>Cook Time (ms):</th>
+        <th><input id="txtProcessCookTime" value="1000" type="text"></th>
+      </tr>
+      <tr>
+        <th>Drip Time (ms):</th>
+        <th><input id="txtDripTime" value="10000" type="text"></th>
+      </tr>
+      <tr>
+        <th>Shake Time (ms):</th>
+        <th><input id="txtShakeTime" value="10000" type="text"></th>
+      </tr>
+      <tr>
+        <th>Number of Shakes:</th>
+        <th><input id="txtNbShakes" value="3" type="text"></th>
+      </tr>
+      <tr>
+        <th>
+          <font color="red">Runs Max:</font>
+        </th>
+        <th><input id="txtMassRunsMax" value="1" type="text"></th>
+      </tr>
+      <tr>
+        <th>
+          <font color="red">Dispense timeout (ms):</font>
+        </th>
+        <th><input id="txtMassDispenseTimeout" value="0" type="text"></th>
+      </tr>
+      <tr>
+        <th>Processing Mode:</th>
+        <th>
+          <select id="cmbProcMode">
+            <option value="0">Unknown</option>
+            <option value="1">Disabled</option>
+            <option value="2">Cook To Rate</option>
+            <option value="3">Push To Cook</option>
+            <option value="4">Additional Product</option>
+          </select>
+        </th>
+      </tr>
+      <tr>
+        <th>Rate (ms):</th>
+        <th><input id="txtRateTime" value="0" type="text"></th>
+      </tr>
+      <tr>
+        <th>Pre-emptive:</th>
+        <th><select id="cmbPreemptive">
+            <option value="0">No</option>
+            <option value="1">Yes</option>
+          </select></th>
+      </tr>
+      <tr>
+        <th>
+          <button id="btnDispenseMass" onclick="DispenseMass()" value="" type="button">Process</button>
+        </th>
+        <th>
+          <button id="btnMassSetParam" onclick="MassSetParams()" value="" type="button">Update Parameters</button>
+        </th>
+      </tr>
+      <tr>
+        <th>
+          <button id="btnCookToRate" onclick="CookToRate()" value="" type="button">Cook To Rate</button>
+        </th>
+      </tr>
+    </table>
+
+    <br>
+
+    <table>
+      <h1>PID</h1>
+      <tr>
+        <th>Idx:</th>
+        <th><input id="txtPidIdx" value="0" type="text"></th>
+      </tr>
+      <tr>
+        <th>
+          <font color="red">Pid Kp:</font>
+        </th>
+        <th><input id="txtDispenseKp" value="1" type="text"></th>
+      </tr>
+      <tr>
+        <th>
+          <font color="red">Pid Ki:</font>
+        </th>
+        <th><input id="txtDispenseKi" value="0" type="text"></th>
+      </tr>
+      <tr>
+        <th>
+          <font color="red">Pid Kd:</font>
+        </th>
+        <th><input id="txtDispenseKd" value="0" type="text"></th>
+      </tr>
+      <tr>
+        <th>
+          <font color="red">Pid Satur Min:</font>
+        </th>
+        <th><input id="txtDispenseSaturMin" value="0" type="text"></th>
+      </tr>
+      <tr>
+        <th>
+          <font color="red">Pid Satur Max:</font>
+        </th>
+        <th><input id="txtDispenseSaturMax" value="100" type="text"></th>
+      </tr>
+      <tr>
+        <th>
+          <font color="red">Pid Offset:</font>
+        </th>
+        <th><input id="txtDispensePidOffset" value="0" type="text"></th>
+      </tr>
+      <tr>
+        <th>
+          <font color="red">Sampling Time (ms):</font>
+        </th>
+        <th><input id="txtDispenseSamplingT" value="100" type="text"></th>
+      </tr>
+      <tr>
+        <th>
+        <th>
+          <button id="btnSpacer" onclick="" value="" type="button" hidden="hidden"></button>
+          <button id="btnPidSetParams" onclick="PidSetParams()" value="" type="button">Update Parameters</button>
+        </th>
+  </th>
+  </tr>
+  </table>
+
+  <br>
+
+
+  </th>
+
+  <th>
+    <table style="width:80%">
+      <h1>Temperature Control: </h1>
+      <tr>
+        <th>Idx:</th>
+        <th><input id="txtTemperatureControlIdx" value="0" type="text"></th>
+      </tr>
+      <tr>
+        <th>
+          <font color="red">Set Point (degrees C): </font>
+        </th>
+        <th><input id="txtTemperatureControlSetPoint" value="0" type="text"></th>
+      </tr>
+      <tr>
+        <th>
+          <font color="red">Tolerance (degrees C): </font>
+        </th>
+        <th><input id="txtTemperatureControlTolerance" value="0" type="text"></th>
+      </tr>
+      <tr>
+        <th>
+          <font color="red">Mode: </font>
+        </th>
+        <th><select id="cmbTemperatureControlMode">
+            <option value="0">Unspecified</option>
+            <option value="1">Ambient</option>
+            <option value="2">Heating</option>
+            <option value="3">Cooling</option>
+          </select>
+        </th>
+      </tr>
+      <th>
+        <button id="btnTemperatureControlEnable" onclick="TemperatureControlEnable()" value=""
+          type="button">Enable</button>
+        <button id="btnTemperatureControlDisable" onclick="TemperatureControlDisable()" value=""
+          type="button">Disable</button>
+      </th>
+      <th>
+        <button id="btnTemperatureControlSetParam" onclick="TemperatureControlSetParams()" value="" type="button">Update
+          Parameters</button>
+      </th>
+    </table>
+
+    <table style="width:80%">
+      <h1>Agitation: </h1>
+      <tr>
+        <th>Idx:</th>
+        <th><input id="txtAgitatorIdx" value="0" type="text"></th>
+      </tr>
+      <tr>
+        <th>
+          <button id="btnAgitatorRun" onclick="AgitatorRun()" value="" type="button">Run</button>
+        </th>
+        <th>
+          <button id="btnAgitatorStop" onclick="AgitatorStop()" value="" type="button">Stop</button>
+        </th>
+      </tr>
+    </table>
+
+    <h1>Dispenser Drawer</h1>
+    <table style="width:50%">
+      <tr>
+        <th>Idx:</th>
+        <th><input id="txtDrawerIdx" value="0" type="text"></th>
+      </tr>
+      <th>
+        <button id="btnDrawerLock" onclick="DrawerLock()" value="" type="button">Lock</button>
+        <button id="btnDrawerUnlock" onclick="DrawerUnlock()" value="" type="button">Unlock</button>
+      </th>
+    </table>
+
+    <h1>Fryer Specific</h1>
+    <table style="width:50%">
+
+      <tr>
+        <th>Freezer Idx:</th>
+        <th><input id="txtFreezerIdx" value="0" type="text" /></th>
+      </tr>
+      <tr>
+        <th><button id="btnFreezerActivate" onclick="FreezerActivate()" value="" type="button">Activate Freezer</button>
+          <br />
+          <button id="btnFreezerDeactivate" onclick="FreezerDeactivate()" value="" type="button">Deactivate
+            Freezer</button>
+        </th>
+        <th><button id="btnFreezerUnlock" onclick="FreezerUnlock()" value="" type="button">Request Unlock
+            Freezer</button></th>
+      </tr>
+      <tr>
+        <th>Hot Hold Idx:</th>
+        <th><input id="txtHotHoldIdx" value="0" type="text" /></th>
+      </tr>
+      <tr>
+        <th><button id="btnHotHoldActivate" onclick="HotHoldActivate()" value="" type="button">Activate Hot
+            Hold</button></th>
+        <th><button id="btnHotHoldDeactivate" onclick="HotHoldDeactivate()" value="" type="button">Deactivate Hot
+            Hold</button></th>
+      </tr>
+      <tr>
+        <th>Machine Mode:</th>
+        <th>
+          <select id="cmbOpMode">
+            <option value="0">Unknown</option>
+            <option value="1">Standby</option>
+            <option value="2">Operational Running</option>
+            <option value="3">Operational Stopped</option>
+            <option value="4">Cleaning</option>
+            <option value="5">Manual</option>
+          </select>
+          <button id="btnChangeOpMode" onclick="ChangeOpMode()" value="" type="button">Change Operating Mode</button>
+        </th>
+      </tr>
+    </table>
+
+  </th>
+
+
+
+  </tr>
+  </table>
+
+  <div class="hl"></div>
+
+  <table style="width:100%">
+    <tr>
+      <th>
+        <h1>Log</h1>
+        <table style="width:50%">
+          <tr>
+            <th>
+              <button id="btnClearLog" onclick="ClearLog()" value="" type="button">Clear</button>
+            </th>
+          </tr>
+          <tr>
+            <th>
+              <textarea readonly id="txtLogArea" rows="20" cols="130"></textarea>
+            </th>
+          </tr>
+        </table>
+      </th>
+
+      <th>
+        <h1>PID Data (CSV)</h1>
+        <table style="width:50%">
+          <tr>
+            <th>
+              <button id="btnClearPidLog" onclick="ClearPidLog()" value="" type="button">Clear</button>
+            </th>
+          </tr>
+          <tr>
+            <th>
+              <textarea readonly style="overflow:hidden;" id="txtPidAreaTitle" rows="1" cols="98"></textarea>
+            </th>
+          </tr>
+          <tr>
+            <th>
+              <textarea readonly id="txtPidArea" rows="17" cols="98"></textarea>
+            </th>
+          </tr>
+        </table>
+      </th>
+    </tr>
+  </table>
+  <script>
+    function EepromExport() {
+
+      ScaleSetParams();
+      MassSetParams();
+      PidSetParams();
+      StepperSetParams();
+      DcMotorSetParams();
+      IngredientSetParams();
+      TransportPosSetParams();
+
+      var e = document.getElementById("txtDispenserId");
+      var filename = e.options[e.selectedIndex].text + "_EEPROM.txt";
+
+      var file = new Blob([document.getElementById("eepromExportData").value], { type: "text/plain;charset=utf-8" });
+
+      if (window.navigator.msSaveOrOpenBlob) // IE10+
+        window.navigator.msSaveOrOpenBlob(file, filename);
+      else { // Others
+        var a = document.createElement("a"),
+          url = URL.createObjectURL(file);
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(function () {
+          document.body.removeChild(a);
+          window.URL.revokeObjectURL(url);
+        }, 0);
+      }
+    }
+
+    function UploadEepromFile(e) {
+
+      var file = e.target.files[0];
+      if (!file) {
+        return;
+      }
+      var reader = new FileReader();
+      reader.onload = function (e) {
+        document.getElementById('eepromExportData').value = e.target.result;
+        console.log(document.getElementById('eepromExportData').value);
+        EepromImport();
+      };
+      reader.readAsText(file);
+    }
+
+    function ChangeFirmwareUpgradePath(e) {
+      if (e.target.value == 1)
+        document.getElementById("txtFirmwareUrl").value = "skyrnet.local:8080/app1.bin";
+      if (e.target.value == 2)
+        document.getElementById("txtFirmwareUrl").value = "skyrnet.local:8080/nextion.tft";
+    }
+
+    document.getElementById('btnEepromImport')
+      .addEventListener('change', UploadEepromFile, false);
+
+  </script>
+</body>
+
+</html>
