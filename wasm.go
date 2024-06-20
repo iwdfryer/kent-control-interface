@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
-	"gitlab.com/karakuritech/dk/kent/proto/kentpb"
+	"github.com/iwdfryer/kent/proto/kentpb"
 )
 
 const (

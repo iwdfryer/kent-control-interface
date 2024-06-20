@@ -1,10 +1,10 @@
 package main
 
 import (
-	"gitlab.com/karakuritech/dk/kent"
-	"gitlab.com/karakuritech/dk/kent/proto/kentpb"
+	"github.com/iwdfryer/kent"
+	"github.com/iwdfryer/kent/proto/kentpb"
 
-	"gitlab.com/karakuritech/dk/utensils/logr"
+	"github.com/iwdfryer/utensils/logr"
 
 	"encoding/base64"
 	"encoding/json"
