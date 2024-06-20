@@ -4,7 +4,6 @@
 
 "use strict";
 
-const globalThis = window;
 (() => {
 	const enosys = () => {
 		const err = new Error("not implemented");
@@ -114,6 +113,10 @@ const globalThis = window;
 				this.mem.setUint32(addr + 4, Math.floor(v / 4294967296), true);
 			}
 
+			const setInt32 = (addr, v) => {
+				this.mem.setUint32(addr + 0, v, true);
+			}
+
 			const getInt64 = (addr) => {
 				const low = this.mem.getUint32(addr + 0, true);
 				const high = this.mem.getInt32(addr + 4, true);
@@ -207,7 +210,10 @@ const globalThis = window;
 
 			const timeOrigin = Date.now() - performance.now();
 			this.importObject = {
-				go: {
+				_gotest: {
+					add: (a, b) => a + b,
+				},
+				gojs: {
 					// Go's SP does not change as long as no Go code is running. Some operations (e.g. calls, getters and setters)
 					// may synchronously trigger a Go event handler. This makes Go code get executed in the middle of the imported
 					// function. A goroutine can switch to a new stack if the current stack is too small (see morestack function).
@@ -232,7 +238,7 @@ const globalThis = window;
 						const fd = getInt64(sp + 8);
 						const p = getInt64(sp + 16);
 						const n = this.mem.getInt32(sp + 24, true);
-						globalThis.fs.writeSync(fd, new Uint8Array(this._inst.exports.mem.buffer, p, n));
+						fs.writeSync(fd, new Uint8Array(this._inst.exports.mem.buffer, p, n));
 					},
 
 					// func resetMemoryDataView()
@@ -270,7 +276,7 @@ const globalThis = window;
 									this._resume();
 								}
 							},
-							getInt64(sp + 8) + 1, // setTimeout has been seen to fire up to 1 millisecond early
+							getInt64(sp + 8),
 						));
 						this.mem.setInt32(sp + 16, id, true);
 					},
